@@ -15,7 +15,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync/atomic"
 	"syscall"
 	"time"
 	"webserver/internal/cgroup_manager"
@@ -45,7 +44,6 @@ type WebServer struct {
 	WEXs                 []string
 	CgroupManager        *cgroup_manager.CgroupManager
 	MemUtilizationWindow *list.List
-	CurrentRequests      int32
 }
 
 type PostRequestBody struct {
@@ -67,24 +65,19 @@ func (ws *WebServer) Start() {
 }
 
 func (ws *WebServer) HandleGet(w http.ResponseWriter, req *http.Request) {
-	slog.Debug("Received a GET request")
-	atomic.AddInt32(&ws.CurrentRequests, 1)
-	defer atomic.AddInt32(&ws.CurrentRequests, -1)
-
+	slog.Info("Received a request")
 	ws.HandleRequest(w, req, "")
 }
 
 func (ws *WebServer) HandlePost(w http.ResponseWriter, req *http.Request) {
-	slog.Info("Received a POST request")
-	atomic.AddInt32(&ws.CurrentRequests, 1)
-	defer atomic.AddInt32(&ws.CurrentRequests, -1)
-
+	slog.Info("Received a request")
 	var requestBody PostRequestBody
 
 	// Decode the JSON body into the struct
 	err := json.NewDecoder(req.Body).Decode(&requestBody)
 	if err != nil {
-		slog.Debug("Invalid/Empty request body", "reason", err)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
 	}
 
 	// Call HandleRequest() with provided WASM parameter
@@ -100,25 +93,22 @@ func (ws *WebServer) HandleRequest(w http.ResponseWriter, req *http.Request, was
 	requestID := uuid.New().String()
 	wasmFile := mux.Vars(req)["wasm_file"]
 
-	cpuLimit := "1000"
-	memLimit := "1000"
-
 	// Check validity of the request
 	if !ws.IsValidRequest(req.Header) {
-		// w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
 		slog.Info("Invalid request, not specified resources", "handler_id", handlerID, "wasm_file", wasmFile)
-		// w.Write([]byte("Invalid request\n"))
+		w.Write([]byte("Invalid request\n"))
 
-		// beforeLock := time.Now()
-		// runtime.UnlockOSThread()
-		// slog.Debug("Unlocked OS thread", "time", time.Since(beforeLock))
-		// return
+		beforeLock := time.Now()
+		runtime.UnlockOSThread()
+		slog.Debug("Unlocked OS thread", "time", time.Since(beforeLock))
+		return
 	}
 
 	var finalWasmOutput string
 	var finalStatus int
 
-	wasmOutput, timesData, err := ws.HandleThreadExecution(handlerID, requestID, wasmFile, cpuLimit, memLimit, wasmParam)
+	wasmOutput, err := ws.HandleThreadExecution(handlerID, requestID, wasmFile, req.Header, wasmParam)
 
 	if err != nil {
 		slog.Error("Failed to run WASM thread", "reason", err)
@@ -130,12 +120,8 @@ func (ws *WebServer) HandleRequest(w http.ResponseWriter, req *http.Request, was
 	beforeLock := time.Now()
 	runtime.UnlockOSThread()
 	slog.Debug("Unlocked OS thread", "time", time.Since(beforeLock))
-	slog.Debug("Done with a request", "handler_id", handlerID, "request_id", requestID, "time", time.Since(start))
+	slog.Info("Done with a request", "handler_id", handlerID, "request_id", requestID, "time", time.Since(start))
 	w.Header().Set("Content-Type", "text/plain")
-	for key, value := range timesData {
-		w.Header().Set(key, value)
-	}
-
 	w.WriteHeader(finalStatus)
 	w.Write([]byte(fmt.Sprintf("WASM output: %s", strings.TrimRight(finalWasmOutput, "\x00"))))
 }
@@ -144,44 +130,21 @@ func (ws *WebServer) IsValidRequest(headers http.Header) bool {
 	return headers.Get("cpu_quota") != "" && headers.Get("Memory-Request") != ""
 }
 
-func (ws *WebServer) HandleThreadExecution(handlerID, requestID, wasmFile, memLimit, cpuLimit, wasmModuleParam string) (string, map[string]string, error) {
+func (ws *WebServer) HandleThreadExecution(handlerID, requestID, wasmFile string, headers http.Header, wasmModuleParam string) (string, error) {
 	// Acquire a cgorup with according cpu/memory resource limits
-	beforeCgroupCreateTime := time.Now()
-	if ws.Config.EnableCgroups {
-		ws.CgroupManager.Acquire(requestID, cpuLimit, memLimit)
-	}
-	cgroupCreationTime := time.Since(beforeCgroupCreateTime)
-
-	// Assign a cgorup with according cpu/memory resource limits
-	beforeCgroupAssignTime := time.Now()
-	if ws.Config.EnableCgroups {
-		ws.CgroupManager.Assign(requestID, handlerID)
-	}
-	cgroupAssignTime := time.Since(beforeCgroupAssignTime)
+	ws.CgroupManager.Acquire(requestID, headers.Get("cpu_quota"), headers.Get("Memory-Request"))
 
 	// Run WASM thread
-	beforeExecutionTime := time.Now()
-	wasmThreadOutput := ws.RunWasmThread(handlerID, requestID, wasmFile, wasmModuleParam, memLimit)
-	executionTime := time.Since(beforeExecutionTime)
+	wasmThreadOutput := ws.RunWasmThread(handlerID, requestID, wasmFile, wasmModuleParam, headers.Get("Memory-Request"))
 
 	// Delete the cgroup after the execution
-	if ws.Config.EnableCgroups {
-		ws.CgroupManager.Release(requestID)
-	}
-
-	timesData := map[string]string{
-		"Cgroup-Creation-Time": strconv.FormatInt(cgroupCreationTime.Milliseconds(), 10),
-		"Cgroup-Assign-Time":   strconv.FormatInt(cgroupAssignTime.Milliseconds(), 10),
-		"Execution-Time":       strconv.FormatInt(executionTime.Milliseconds(), 10),
-		"Num-Current-Requests": strconv.Itoa(int(ws.CurrentRequests)),
-		"Pod":                  ws.CgroupManager.Config.PodUID,
-	}
+	ws.CgroupManager.Release(requestID)
 
 	if wasmThreadOutput.Err != nil {
-		return "", timesData, wasmThreadOutput.Err
+		return "", wasmThreadOutput.Err
 	}
 
-	return wasmThreadOutput.Output, timesData, nil
+	return wasmThreadOutput.Output, nil
 }
 
 func (ws *WebServer) LoadModule(filePath string) ([]byte, error) {
@@ -210,6 +173,9 @@ func (ws *WebServer) RunWasmThread(handlerID, requestID, wasmFile string, wasmMo
 }
 
 func (ws *WebServer) RunWasmtime(handlerID, requestID, wasmFile string, wasmModuleParam string, maxMemory string) WasmThreadResult {
+	// Assign a cgorup with according cpu/memory resource limits
+	ws.CgroupManager.Assign(requestID, handlerID)
+
 	// Use Wasmtime to execute "wasmFile"
 	slog.Info("Start WASM thread", "handler_id", strconv.Itoa(syscall.Gettid()), "memory_limit", maxMemory)
 	dir, err := os.MkdirTemp("", "out")
@@ -289,11 +255,16 @@ func (ws *WebServer) RunWasmtime(handlerID, requestID, wasmFile string, wasmModu
 func (ws *WebServer) RunWasmedge(handlerID, requestID, wasmFile string, wasmModuleParam string, maxMemory string) WasmThreadResult {
 	wasmedge.SetLogErrorLevel()
 
+	maxMemoryInt, _ := strconv.Atoi(maxMemory)
+	preallocatedSize := int32(float64(maxMemoryInt) * ws.Config.MemPreAllocationRatio)
+
 	conf := wasmedge.NewConfigure(wasmedge.WASI)
 	conf.SetMaxMemoryPage(uint(getMemoryInWasmPages(maxMemory)))
-	slog.Debug("Max memory is configured", "max value (Wasm pages)", getMemoryInWasmPages(maxMemory))
+	slog.Debug("Memory is configured", "max_value (Wasm pages)", getMemoryInWasmPages(maxMemory), "preallocated_size (mb)", preallocatedSize)
+	// defer conf.Release()
 
 	vm := wasmedge.NewVMWithConfig(conf)
+	// defer vm.Release()
 
 	var wasi = vm.GetImportModule(wasmedge.WASI)
 	wasi.InitWasi(
@@ -320,21 +291,60 @@ func (ws *WebServer) RunWasmedge(handlerID, requestID, wasmFile string, wasmModu
 
 	bg := bindgen.New(vm)
 	bg.Instantiate()
+	// defer bg.Release()
 
-	res, _, err := bg.Execute("_main")
+	// Pre-allocate memory
+	mod := vm.GetActiveModule()
+	mem := mod.FindMemory("memory")
+	startPreAllocTime := time.Now()
+	allocateResult, _ := vm.Execute("allocate", int32(getMemoryInBytes(strconv.Itoa(int(preallocatedSize)))+1))
+	inputPointer := allocateResult[0].(int32)
+	memData, _ := mem.GetData(uint(inputPointer), uint(getMemoryInBytes(strconv.Itoa(int(preallocatedSize)))+1))
+	for i := range memData {
+		memData[i] = byte(1)
+	}
+	memData[getMemoryInBytes(strconv.Itoa(int(preallocatedSize)))] = 0
+	slog.Debug("Memory is pre-allocated", "time", time.Since(startPreAllocTime))
+
+	vm.Execute("deallocate", inputPointer, int32(getMemoryInBytes(strconv.Itoa(int(preallocatedSize)))+1))
+
+	// Assign a cgorup with according cpu/memory resource limits
+	ws.CgroupManager.Assign(requestID, handlerID)
+
+	// Execute the WASM module
+	res, err := vm.Execute("_main", inputPointer, preallocatedSize, int32(time.Since(startPreAllocTime).Milliseconds()))
 	if err != nil {
 		slog.Error("Run failed", "reason", err.Error())
-		bg.Release()
 		vm.Release()
 		conf.Release()
+		bg.Release()
 		return WasmThreadResult{Output: "", Err: err}
 	}
 
-	bg.Release()
+	// Retrieve the output
+	outputPointer := res[0].(int32)
+	pageSize := mem.GetPageSize()
+	memData, _ = mem.GetData(uint(0), uint(pageSize*65536))
+	nth := 0
+	var output strings.Builder
+
+	for {
+		if memData[int(outputPointer)+nth] == 0 {
+			break
+		}
+
+		output.WriteByte(memData[int(outputPointer)+nth])
+		nth++
+	}
+	lengthOfOutput := nth
+
+	vm.Execute("deallocate", outputPointer, int32(lengthOfOutput+1))
+
 	vm.Release()
 	conf.Release()
+	bg.Release()
 
-	return WasmThreadResult{Output: res[0].(string), Err: err}
+	return WasmThreadResult{Output: output.String(), Err: err}
 }
 
 func getMemoryInBytes(memory string) int64 {
