@@ -1,0 +1,66 @@
+# apiVersion: networking.istio.io/v1alpha3
+# kind: Gateway
+# metadata:
+#   name: wasmws-gateway
+# spec:
+#   # The selector matches the ingress gateway pod labels.
+#   # If you installed Istio using Helm following the standard documentation, this would be "istio=ingress"
+#   selector:
+#     istio: istio-ingressgateway # use istio default controller
+#   servers:
+#   - port:
+#       number: 59152
+#       name: http
+#       protocol: HTTP
+#     hosts:
+#     - "*"
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: consistenthashing-wasmws-destinationrule
+spec:
+  host: wasmws.default.192.168.106.210.sslip.io
+  trafficPolicy:
+    loadBalancer:
+      consistentHash:
+        httpHeaderName: "my-header"
+  subsets:
+    - name: all
+      labels:
+        networking.internal.knative.dev/ingress: wasmws
+        serving.knative.dev/route: wasmws
+        serving.knative.dev/routeNamespace: default
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: consistenthashing-wasmws-virtualservice
+spec:
+  hosts:
+  - wasmws.default
+  - wasmws.default.svc
+  - wasmws.default.svc.cluster.local
+  - wasmws.default.192.168.106.210.sslip.io
+  gateways:
+  - knative-serving/knative-ingress-gateway
+  - knative-serving/knative-local-gateway
+  http:
+  - match:
+    - authority:
+        prefix: wasmws.default
+      gateways:
+      - knative-serving/knative-ingress-gateway
+    route:
+    - destination:
+        host: wasmws-00001.default.svc.cluster.local
+        
+  # - match:
+  #   - uri:
+  #       prefix: /func2
+  #   route:
+  #   - destination:
+  #       host: <dynamic> (service name)
+  #       subset: subset 2 (associated with pod 2)
+  #   - destination:
+  #       host: <dynamic> (service name)
+  #       subset: subset 3 (associated with pod 3)

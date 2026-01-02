@@ -14,7 +14,6 @@ type WebServerConfig struct {
 	ReadinessRandTreshold        int     `env-required:"true" env:"READINESS_RAND_TRESHOLD"`
 	GCUtilizationTreshold        float64 `env-required:"true" env:"GC_UTILIZATION_TRESHOLD"`
 	MemoryLimit                  float64 `env-required:"true" env:"MEMORY_LIMIT"`
-	EnableCgroups                bool    `env-required:"true" env:"ENABLE_CGROUPS"`
 }
 
 type HealthCheckConfig struct {
