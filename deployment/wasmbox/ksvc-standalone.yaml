@@ -7,13 +7,7 @@ spec:
     metadata:
       annotations:
         features.knative.dev/superpod: "Enabled"
-        autoscaling.knative.dev/metric: "memory"
-        autoscaling.knative.dev/target: "9100"
-        autoscaling.knative.dev/target-burst-capacity: "1000"
     spec:
-      concurrentResourceRequest: 13000
-      queueDepthResourceUnits: 990000000000000000
-      resourceUtilizationThreshold: 6
       containers:
         - image: aminb7/wasm_ws:wasmedge_exp1_500_v12
           ports:

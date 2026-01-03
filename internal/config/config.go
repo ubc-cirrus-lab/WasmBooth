@@ -14,6 +14,8 @@ type WebServerConfig struct {
 	ReadinessRandTreshold        int     `env-required:"true" env:"READINESS_RAND_TRESHOLD"`
 	GCUtilizationTreshold        float64 `env-required:"true" env:"GC_UTILIZATION_TRESHOLD"`
 	MemoryLimit                  float64 `env-required:"true" env:"MEMORY_LIMIT"`
+	EnableMemPreAllocation       bool    `env-required:"false" env:"ENABLE_MEM_PRE_ALLOCATION"`
+	MemPreAllocationRatio        float64 `env-required:"false" env:"MEM_PRE_ALLOCATION_RATIO"`
 }
 
 type HealthCheckConfig struct {

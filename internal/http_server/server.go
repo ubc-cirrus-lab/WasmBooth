@@ -331,6 +331,101 @@ func (ws *WebServer) RunWasmedge(handlerID, requestID, wasmFile string, wasmModu
 	return WasmThreadResult{Output: res[0].(string), Err: err}
 }
 
+func (ws *WebServer) RunWasmedgePreAlloc(handlerID, requestID, wasmFile string, wasmModuleParam string, maxMemory string) WasmThreadResult {
+	wasmedge.SetLogErrorLevel()
+
+	maxMemoryInt, _ := strconv.Atoi(maxMemory)
+	preallocatedSize := int32(float64(maxMemoryInt) * ws.Config.MemPreAllocationRatio)
+
+	conf := wasmedge.NewConfigure(wasmedge.WASI)
+	conf.SetMaxMemoryPage(uint(getMemoryInWasmPages(maxMemory)))
+	slog.Debug("Memory is configured", "max_value (Wasm pages)", getMemoryInWasmPages(maxMemory), "preallocated_size (mb)", preallocatedSize)
+	// defer conf.Release()
+
+	vm := wasmedge.NewVMWithConfig(conf)
+	// defer vm.Release()
+
+	var wasi = vm.GetImportModule(wasmedge.WASI)
+	wasi.InitWasi(
+		nil,
+		nil,
+		nil,
+	)
+
+	err := vm.LoadWasmFile(filepath.Join("functions", wasmFile))
+	if err != nil {
+		slog.Error("Load WASM from file failed.", "reason", err.Error())
+		vm.Release()
+		conf.Release()
+		return WasmThreadResult{Output: "", Err: err}
+	}
+
+	err = vm.Validate()
+	if err != nil {
+		slog.Debug("Wasmedge validation failed.", "reason", err.Error())
+		vm.Release()
+		conf.Release()
+		return WasmThreadResult{Output: "", Err: err}
+	}
+
+	bg := bindgen.New(vm)
+	bg.Instantiate()
+	// defer bg.Release()
+
+	// Pre-allocate memory
+	mod := vm.GetActiveModule()
+	mem := mod.FindMemory("memory")
+	startPreAllocTime := time.Now()
+	allocateResult, _ := vm.Execute("allocate", int32(getMemoryInBytes(strconv.Itoa(int(preallocatedSize)))+1))
+	inputPointer := allocateResult[0].(int32)
+	memData, _ := mem.GetData(uint(inputPointer), uint(getMemoryInBytes(strconv.Itoa(int(preallocatedSize)))+1))
+	for i := range memData {
+		memData[i] = byte(1)
+	}
+	memData[getMemoryInBytes(strconv.Itoa(int(preallocatedSize)))] = 0
+	slog.Debug("Memory is pre-allocated", "time", time.Since(startPreAllocTime))
+
+	vm.Execute("deallocate", inputPointer, int32(getMemoryInBytes(strconv.Itoa(int(preallocatedSize)))+1))
+
+	// Assign a cgorup with according cpu/memory resource limits
+	ws.CgroupManager.Assign(requestID, handlerID)
+
+	// Execute the WASM module
+	res, err := vm.Execute("_main", inputPointer, preallocatedSize, int32(time.Since(startPreAllocTime).Milliseconds()))
+	if err != nil {
+		slog.Error("Run failed", "reason", err.Error())
+		vm.Release()
+		conf.Release()
+		bg.Release()
+		return WasmThreadResult{Output: "", Err: err}
+	}
+
+	// Retrieve the output
+	outputPointer := res[0].(int32)
+	pageSize := mem.GetPageSize()
+	memData, _ = mem.GetData(uint(0), uint(pageSize*65536))
+	nth := 0
+	var output strings.Builder
+
+	for {
+		if memData[int(outputPointer)+nth] == 0 {
+			break
+		}
+
+		output.WriteByte(memData[int(outputPointer)+nth])
+		nth++
+	}
+	lengthOfOutput := nth
+
+	vm.Execute("deallocate", outputPointer, int32(lengthOfOutput+1))
+
+	vm.Release()
+	conf.Release()
+	bg.Release()
+
+	return WasmThreadResult{Output: output.String(), Err: err}
+}
+
 func getMemoryInBytes(memory string) int64 {
 	maxMemoryInt, err := strconv.Atoi(memory)
 	if err != nil {
