@@ -28,24 +28,19 @@ WasmBox provides CPU isolation using Linux cgroups and memory isolation using so
 
 3. Configure a Persistant Volume named `wasmws-wasm-pvc` to store Wasm modules. It could be any filesystem (e.g. Ceph).
 
-4. Configure the resource requests and limits for WasmBox in `deployment/ksvc.yaml` or `deployment/ksvc-standalone.yaml`:
+4. Configure the image, resource requests and limits, and other parameters for WasmBox in `deployment/wasmbox/ksvc.yaml` or `deployment/wasmbox/ksvc-standalone.yaml`:
     ```bash
-    resources:
-        requests:
-            cpu: <allocated_cpu>
-            memory: <allocated_memory>
-        limits:
-            cpu: <cpu_limit>
-            memory: <memory_limit>
+    - image: <image_address>
+      resources:
+          requests:
+              cpu: <allocated_cpu>
+              memory: <allocated_memory>
+          limits:
+              cpu: <cpu_limit>
+              memory: <memory_limit>
     ```
 
-5. Cgroups management can be disabled through the following configuration in `deployment/ksvc.yaml` or `deployment/ksvc-standalone.yaml`:
-    ```bash
-        - name: ENABLE_CGROUPS
-          value: "false"
-    ```
-
-6. Deploy WasmBox:
+5. Deploy WasmBox:
 
     #### Default platform configurations:
     ```bash
