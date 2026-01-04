@@ -10,9 +10,17 @@ WasmBox provides CPU isolation using Linux cgroups and memory isolation using so
 
 ### Requirements
 
-- A tool to build WasmBox into a container image (e.g. Docker)
-- A container orchestration platform (i.e. Knative, Kubernetes, etc) or a just a container runtime (e.g. containerd, Docker, etc) to run WasmBox.
-- kubectl (when deploying on Kubernetes-based platforms)
+To build and run WasmBox, you will need:
+
+- A tool for building container images (e.g., Docker)
+
+- A container runtime or orchestration platform to run WasmBox, such as:
+
+    - Kubernetes (tested with v1.27 – v1.30), or
+    - Kubernetes (tested with v1.27 – v1.30) + Knative (tested with v1.15.2), or
+    - A standalone container runtime (e.g., containerd, Docker)
+
+- kubectl (required only when deploying to Kubernetes-based platforms)
 
 ### Steps (Knative-specific)
 
