@@ -70,3 +70,28 @@ To build and run WasmBox, you will need:
         ```
 
         \* Input data can be send through the HTTP body using POST requests.
+
+
+## Functions
+
+WasmBox executes user-defined functions compiled to WebAssembly (Wasm). This section outlines general guidelines for writing compatible functions.
+
+### Writing Your Own Functions
+
+Functions must be compiled to WebAssembly using a Wasm toolchain. We recommend using one of the following Wasm compilers/runtimes:
+
+- Wasmtime
+    Documentation: https://docs.wasmtime.dev/
+
+- WasmEdge
+    Documentation: https://wasmedge.org/docs/
+
+When writing functions, ensure that:
+
+- The function is compiled to a Wasm module compatible with the target runtime.
+
+- Any required inputs/outputs follow the interface expected by WasmBox. (Note: WasmBox expects functions to receive inputs as command-line arguments and produce outputs via standard output (stdout))
+
+- The function does not rely on unsupported system calls or platform-specific features unless explicitly supported by the chosen runtime.
+
+The exact compilation flags and runtime-specific considerations depend on the compiler/runtime you choose; please refer to the corresponding documentation above for details.
