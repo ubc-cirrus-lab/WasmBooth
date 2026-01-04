@@ -1,3 +1,5 @@
+Mohammadamin Baqershahi, Changyuan Lin, Visal Saosuo, Paul Chen, and Mohammad Shahrad, "Hierarchical Integration of WebAssembly in Serverless for Efficiency and Interoperability", The 23rd USENIX Symposium on Networked Systems Design and Implementation (NSDI '26).
+
 # Wasabi-WasmBox
 
 WasmBox is a serverless runtime multiplexer based on Webassembly.
