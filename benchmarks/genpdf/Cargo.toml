@@ -1,0 +1,21 @@
+[package]
+name = "genpdf"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hyper = { version = "0.14", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
+serde_json = "1.0.62"
+serde = { version = "1.0.62", features = ["derive"] }
+rsa = { version = "0.4.0", features = ["pem"] }
+base64 = "0.13.0"
+rand_core = { version = "0.6", features = ["std"] }
+orion = "0.17.1"
+rand = "0.8"
+image = "0.24"
+lopdf = { version = "0.27.0" }
+
+[[bin]]
+name = "genpdf"
+path = "src/main.rs"
