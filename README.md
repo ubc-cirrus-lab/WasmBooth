@@ -94,4 +94,6 @@ When writing functions, ensure that:
 
 - The function does not rely on unsupported system calls or platform-specific features unless explicitly supported by the chosen runtime.
 
+- For improved function execution performance, we recommend using Ahead-of-Time (AOT) compilation rather than Just-in-Time (JIT) compilation, as AOT eliminates runtime compilation overhead and reduces invocation latency.
+
 The exact compilation flags and runtime-specific considerations depend on the compiler/runtime you choose; please refer to the corresponding documentation above for details.
