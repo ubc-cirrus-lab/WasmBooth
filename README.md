@@ -1,3 +1,5 @@
+Mohammadamin Baqershahi, Changyuan Lin, Visal Saosuo, Paul Chen, and Mohammad Shahrad, "Hierarchical Integration of WebAssembly in Serverless for Efficiency and Interoperability", The 23rd USENIX Symposium on Networked Systems Design and Implementation (NSDI '26).
+
 # Wasabi-WasmBox
 
 WasmBox is a serverless runtime multiplexer based on Webassembly.
@@ -8,9 +10,17 @@ WasmBox provides CPU isolation using Linux cgroups and memory isolation using so
 
 ### Requirements
 
-- A tool to build WasmBox into a container image (e.g. Docker)
-- A container orchestration platform (i.e. Knative, Kubernetes, etc) or a just a container runtime (e.g. containerd, Docker, etc) to run WasmBox.
-- kubectl (when deploying on Kubernetes-based platforms)
+To build and run WasmBox, you will need:
+
+- A tool for building container images (e.g., Docker)
+
+- A container runtime or orchestration platform to run WasmBox, such as:
+
+    - Kubernetes (tested with v1.27 – v1.30), or
+    - Kubernetes (tested with v1.27 – v1.30) + Knative (tested with v1.15.2), or
+    - A standalone container runtime (e.g., containerd, Docker)
+
+- kubectl (required only when deploying to Kubernetes-based platforms)
 
 ### Steps (Knative-specific)
 
@@ -60,3 +70,28 @@ WasmBox provides CPU isolation using Linux cgroups and memory isolation using so
         ```
 
         \* Input data can be send through the HTTP body using POST requests.
+
+
+## Functions
+
+WasmBox executes user-defined functions compiled to WebAssembly (Wasm). This section outlines general guidelines for writing compatible functions.
+
+### Writing Your Own Functions
+
+Functions must be compiled to WebAssembly using a Wasm toolchain. We recommend using one of the following Wasm compilers/runtimes:
+
+- Wasmtime
+    Documentation: https://docs.wasmtime.dev/
+
+- WasmEdge
+    Documentation: https://wasmedge.org/docs/
+
+When writing functions, ensure that:
+
+- The function is compiled to a Wasm module compatible with the target runtime.
+
+- Any required inputs/outputs follow the interface expected by WasmBox. (Note: WasmBox expects functions to receive inputs as command-line arguments and produce outputs via standard output (stdout))
+
+- The function does not rely on unsupported system calls or platform-specific features unless explicitly supported by the chosen runtime.
+
+The exact compilation flags and runtime-specific considerations depend on the compiler/runtime you choose; please refer to the corresponding documentation above for details.
