@@ -74,7 +74,7 @@ To build and run WasmBox, you will need:
 
 ## Functions
 
-WasmBox executes user-defined functions compiled to WebAssembly (Wasm). This section outlines general guidelines for writing compatible functions. Example functions are provided in the `benchmarks/` directory
+WasmBox executes user-defined functions compiled to WebAssembly (Wasm). This section outlines general guidelines for writing compatible functions. Example functions are provided in the `benchmarks/` directory.
 
 ### Writing Your Own Functions
 
