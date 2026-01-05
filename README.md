@@ -18,7 +18,7 @@ To build and run WasmBox, you will need:
 
     - Kubernetes (tested with v1.27 – v1.30), or
     - Kubernetes (tested with v1.27 – v1.30) + Knative (tested with v1.15.2), or
-    - A standalone container runtime (e.g., containerd, Docker)
+    - A standalone container runtime (e.g., containerd >v1.6)
 
 - kubectl (required only when deploying to Kubernetes-based platforms)
 
